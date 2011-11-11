@@ -1,0 +1,66 @@
+<html>
+    <head>
+        <title>Showmethedesktop</title>
+        <link rel="stylesheet" href="/styles.css" type="text/css" />
+        <script type="text/javascript" src="jquery.min.js"></script>
+        <script type="text/javascript" src="jquery.json.min.js"></script>
+        <script type="text/javascript" src="vnc.js"></script>
+        <script type="text/javascript">
+
+            $(document).ready(function() {
+                if("MozWebSocket" in window){ 
+                    WebSocket = MozWebSocket;    
+                }
+                var ws = new WebSocket("ws://localhost:9999");
+
+                var vnc = new VNC();
+                vnc.onsend = function(message) {
+                    ws.send(message);
+                };
+
+                ws.onerror = function(e) {
+                    $('#disconnect').html('');
+                    $('#container').html('Error: ' + e);
+                };
+
+                ws.onopen = function() {
+                $('#disconnect').html('<a href="#">Disconnect</a>');
+                $('#disconnect > a').click(function() { ws.close(); return false; });
+
+                    $('#container').html('Connected. Initializing...');
+                };
+
+                ws.onmessage = function(e) {
+                    var jsonsize = e.data.charCodeAt(0)
+                    var data = $.evalJSON(e.data.slice(1,jsonsize+1));
+
+                    if (data.type == 's') {
+                        $('#container').html('Loading...');
+                        vnc.init(data);
+                    }
+                    else if (data.type == 'fu') {
+                        data.rectangle.data = e.data.slice(jsonsize+1)
+                        var aux = '';
+                        for(var i=0; i <16; i++){
+                            aux += data.rectangle.data.charCodeAt(i) + ' ';
+                        }
+                        console.log(aux);
+                        vnc.update(data)
+                    }
+                };
+
+                ws.onclose = function() {
+                    vnc.cleanup();
+                    $('#disconnect').html('');
+                    $('#container').html('Disconnected');
+                };
+            });
+        </script>
+    </head>
+    <body>
+        <div id="disconnect"></div>
+        <div id="container">
+            Connecting...
+        </div>
+    </body>
+</html>
