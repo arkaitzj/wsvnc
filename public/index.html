@@ -6,8 +6,13 @@
         <script type="text/javascript" src="jquery.json.min.js"></script>
         <script type="text/javascript" src="vnc.js"></script>
         <script type="text/javascript">
-
             $(document).ready(function() {
+                var updates = 0;
+                var fps_timer = setInterval(function(){ 
+                    $('#fps').html(updates + ' fps');
+                    updates = 0;
+                    lagging = 0;
+                },1000);
                 if("MozWebSocket" in window){ 
                     WebSocket = MozWebSocket;    
                 }
@@ -31,6 +36,7 @@
                 };
 
                 ws.onmessage = function(e) {
+                    updates += 1;
                     var jsonsize = e.data.charCodeAt(0)
                     var data = $.evalJSON(e.data.slice(1,jsonsize+1));
 
@@ -40,11 +46,6 @@
                     }
                     else if (data.type == 'fu') {
                         data.rectangle.data = e.data.slice(jsonsize+1)
-                        var aux = '';
-                        for(var i=0; i <16; i++){
-                            aux += data.rectangle.data.charCodeAt(i) + ' ';
-                        }
-                        console.log(aux);
                         vnc.update(data)
                     }
                 };
@@ -58,6 +59,7 @@
         </script>
     </head>
     <body>
+        <div id='fps'>n/a</div>
         <div id="disconnect"></div>
         <div id="container">
             Connecting...
