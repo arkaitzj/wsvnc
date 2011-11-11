@@ -62,11 +62,9 @@ function VNC () {
         });
         $(document).keydown(function (e) {
             var code = (e.keyCode ? e.keyCode : e.which);
-
-            // Enter and tab
+            // Enter and tab // Firefox doesn't need this, it shows on keypress
             if (code == 8 || code == 9) {
-                vnc.send({"type":"ke","down":1,"key":code});
-
+                //vnc.send($.toJSON({"type":"ke","is_down":1,"key":code}));
                 return false;
             }
         });
@@ -129,6 +127,8 @@ function VNC () {
     };
 
     this.send = function(message) {
+        console.log(message);
+        console.trace()
         vnc.onsend(message);
     };
 

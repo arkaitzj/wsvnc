@@ -6,6 +6,7 @@ import gevent
 from gevent import select
 from geventwebsocket.handler import WebSocketHandler
 from rfb import RFBClient
+import rfb
 
 def main():
     '''Set up zmq context and greenlets for all the servers, then launch the web
@@ -25,6 +26,16 @@ def main():
     
 class WSVncApp(object):
     '''WS <-> VNC'''
+
+    KEYS = {
+        8 : rfb.KEY_BackSpace,
+        9 : rfb.KEY_Tab,
+        13 : rfb.KEY_Return,
+        37 : rfb.KEY_Left,
+        38 : rfb.KEY_Up,
+        39 : rfb.KEY_Right,
+        40 : rfb.KEY_Down,
+    }
 
     def __init__(self):
         self.posx = None
@@ -64,6 +75,11 @@ class WSVncApp(object):
                         vnc.mouse(int(msg['x']),int(msg['y']),1)
                     else:
                         vnc.mouse(int(msg['x']),int(msg['y']))
+                elif msgtype == 'ke':
+                    print msg
+                    print chr(msg['key'])
+                    key = self.KEYS[msg['key']] if msg['key'] in self.KEYS else msg['key']
+                    vnc.key_event(key, msg['is_down'] )
                 else:
                     print msg['type']
 

@@ -549,10 +549,10 @@ class RFBClient(object):
         for encoding in list_of_encodings:
             self.transport.send(pack("!i", encoding))
     
-    def keyEvent(self, key, down=1):
+    def key_event(self, key, down=1):
         """For most ordinary keys, the "keysym" is the same as the corresponding ASCII value.
         Other common keys are shown in the KEY_ constants."""
-        self.transport.write(pack("!BBxxI", 4, down, key))
+        self.transport.send(pack("!BBxxI", 4, down, key))
 
     def pointerEvent(self, x, y, buttonmask=0):
         """Indicates either pointer movement or a pointer button press or release. The pointer is
