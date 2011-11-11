@@ -40,7 +40,7 @@ function VNC () {
         console.log('Start timer');
         vnc.timer = setInterval(function () {
             vnc.requestUpdate();
-        }, 300);
+        }, 3000);
     };
 
     this.stopTimer = function() {
@@ -93,7 +93,6 @@ function VNC () {
         vnc.container.bind('mousedown', function(e) {
             var coords = vnc.currentMouseCoords(e);
             vnc.send($.toJSON({"type":"pe","x":coords.x,"y":coords.y,"event":"mousedown"}));
-            vnc.requestUpdate();
             vnc.mousedown = true;
         });
 
@@ -105,7 +104,6 @@ function VNC () {
             vnc.mousedown = false;
             var coords = vnc.currentMouseCoords(e);
             vnc.send($.toJSON({"type":"pe","x":coords.x,"y":coords.y,"event":"mouseup"}));
-            vnc.requestUpdate();
         });
 
         vnc.container.bind('mousemove', function(e) {
@@ -115,7 +113,6 @@ function VNC () {
                 action += '+mousedown';
             }
             vnc.send($.toJSON({"type":"pe","x":coords.x,"y":coords.y,"event":action}));
-            vnc.requestUpdate();
         });
     };
 

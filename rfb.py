@@ -27,6 +27,7 @@ ZLIB_ENCODING =                 6
 TIGHT_ENCODING =                7
 ZLIBHEX_ENCODING =              8 
 ZRLE_ENCODING =                 16
+POINTERPOS    =                 -232
 #0xffffff00 to 0xffffffff tight options
 
 #keycodes
@@ -126,6 +127,7 @@ class RFBClient(object):
             print "bpp:%d depth:%d bigendian:%d truecolor:%d redmax:%d greenmax:%d bluemax:%d redshift:%d greenshift:%d blueshift:%d"%(self.bpp, self.depth,self.bigendian,self.truecolor,self.redmax,self.greenmax,self.bluemax,self.redshift,self.greenshift,self.blueshift)
 #            self.set_pixel_format(bpp=self.bpp, depth=self.depth, bigendian=self.bigendian, truecolor=self.truecolor, redmax=self.redmax, greenmax=self.greenmax, bluemax=self.bluemax, redshift=self.redshift, greenshift=self.greenshift, blueshift=self.blueshift)
             self.set_pixel_format()
+            self.set_encodings([RAW_ENCODING, POINTERPOS])
 
         else:
             raise Exception("Weird error")
@@ -157,6 +159,14 @@ class RFBClient(object):
          self.redshift, self.greenshift, self.blueshift) = \
            unpack("!BBBBHHHBBBxxx", pixformat)
         self.bypp = self.bpp / 8        #calc bytes per pixel
+
+    def mouse(self,x,y,left=0,right=0):
+        buttonmask = 0
+        if left:
+            buttonmask |= 0x01
+        if right:
+            buttonmask |= 0x03
+        self.transport.send(pack("!BBhh", 5, buttonmask, x, y))
 
 
     def _handleConnFailed(self):
@@ -197,7 +207,6 @@ class RFBClient(object):
     def handle_framebuffer_update(self):
         block = self.transport.recv(2)
         (rectanglecount,) = unpack("!H", block)
-        print rectanglecount
         rectangles = []
         for i in range(rectanglecount):
             block = self.transport.recv(12)
@@ -208,7 +217,6 @@ class RFBClient(object):
 #                self.expect(self._handleDecodeCopyrect, 4, x, y, width, height)
             elif encoding == RAW_ENCODING:
                 total_size = w*h*self.bypp
-                print "%d*%d*%d = %d"%(w,h,self.bypp,total_size)
                 rectanglebytes = ''
                 curlen = 0
                 while curlen < total_size :
@@ -235,7 +243,6 @@ class RFBClient(object):
     def framebuffer_update_request(self, x=0, y=0, width=None, height=None, incremental=0):
         if width  is None: width  = self.width - x
         if height is None: height = self.height - y
-        print "Incremental %d"%(incremental)
         self.transport.send(pack("!BBHHHH", 3, incremental, x, y, width, height))
 
 
@@ -537,10 +544,10 @@ class RFBClient(object):
         self.bypp = self.bpp / 8        #calc bytes per pixel
         #~ print self.bypp
 
-    def setEncodings(self, list_of_encodings):
-        self.transport.write(pack("!BxH", 2, len(list_of_encodings)))
+    def set_encodings(self, list_of_encodings):
+        self.transport.send(pack("!BxH", 2, len(list_of_encodings)))
         for encoding in list_of_encodings:
-            self.transport.write(pack("!I", encoding))
+            self.transport.send(pack("!i", encoding))
     
     def keyEvent(self, key, down=1):
         """For most ordinary keys, the "keysym" is the same as the corresponding ASCII value.

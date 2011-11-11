@@ -27,7 +27,8 @@ class WSVncApp(object):
     '''WS <-> VNC'''
 
     def __init__(self):
-        pass
+        self.posx = None
+        self.posy = None
 
     def __call__(self, environ, start_response):
         ws = environ['wsgi.websocket']
@@ -43,18 +44,10 @@ class WSVncApp(object):
             if vnc in fds:
                 (msg,data) = vnc.receive()
                 if msg == 0:
-                    if len(data) > 0:
-                        print "FrameBuffer response %d rectangles"%(len(data))
                     for rectangle in data:
                         buff = '{ "type":"fu","rectangle":{"x":'+str(rectangle["x"])+',"y":'+str(rectangle["y"])+',"width":'+str(rectangle["width"])+',"height":'+str(rectangle["height"])+',"encoding":"'+str(rectangle["encoding"])+'", "datalen":'+str(len(rectangle['data']))+'} }'
                         buff = chr(len(buff)) + buff + rectangle['data']
                         ws.send(buff)
-                        from PIL import Image
-                        img = Image.fromstring("RGB",(rectangle["width"],rectangle["height"]),rectangle['data'],'raw','RGBX')
-                        img.save('frame%d.png'%(counter))
-                        for pix in rectangle['data'][0:16]:
-                            print ord(pix),
-                        print "--"
                         counter += 1
                 elif msg == 2:
                     buff = '{"type":"bell"}'
@@ -62,11 +55,17 @@ class WSVncApp(object):
                     ws.send(buff)
             if ws in fds:
                 raw = ws.receive()
-                if not raw: continue
                 msg = json.loads(raw)
-                if msg['type'] == 'fuq':
-                    print "FrameBuffer request %d: %s"%(msg.get('incremental',0), str(msg))
+                msgtype = msg['type']
+                if   msgtype == 'fuq':
                     vnc.framebuffer_update_request(msg['x'],msg['y'], msg['width'], msg['height'], msg.get('incremental',0))
+                elif msgtype == 'pe':
+                    if msg['event'].find('mousedown') != -1:
+                        vnc.mouse(int(msg['x']),int(msg['y']),1)
+                    else:
+                        vnc.mouse(int(msg['x']),int(msg['y']))
+                else:
+                    print msg['type']
 
 if __name__ == '__main__':
     main()
