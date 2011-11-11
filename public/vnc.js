@@ -37,14 +37,12 @@ function VNC () {
     };
 
     this.startTimer = function() {
-        console.log('Start timer');
         vnc.timer = setInterval(function () {
             vnc.requestUpdate();
         }, 3000);
     };
 
     this.stopTimer = function() {
-        console.log('Stop timer');
         if (vnc.timer) {
             clearInterval(vnc.timer);
         }
@@ -86,8 +84,6 @@ function VNC () {
     };
 
     this.bind_mouse_events = function() {
-        console.log('Binding mouse events');
-
         vnc.container.bind('mousedown', function(e) {
             var coords = vnc.currentMouseCoords(e);
             vnc.send($.toJSON({"type":"pe","x":coords.x,"y":coords.y,"event":"mousedown"}));
@@ -115,25 +111,17 @@ function VNC () {
     };
 
     this.unbind_mouse_events = function() {
-        console.log('UnBinding mouse events');
-
         vnc.container.unbind('mousedown');
-
         $(document).unbind('mouseup');
-
         vnc.container.unbind('mouseup');
-
         vnc.container.unbind('mousemove');
     };
 
     this.send = function(message) {
-        console.log(message);
-        console.trace()
         vnc.onsend(message);
     };
 
     this.update = function(message) {
-        console.log('update')
         vnc.unbind_mouse_events();
 
         vnc.stopTimer();
@@ -144,18 +132,18 @@ function VNC () {
         var encoding  = message.rectangle.encoding;
         var data      = message.rectangle.data;
 
-        console.log("x,y=" + x + ',' + y);
+//        console.log("x,y=" + x + ',' + y);
 
         if (encoding == 'Raw') {
             //var img = vnc.context.createImageData(width, height);
             var img = vnc.context.getImageData(0, 0, width, height);
-            console.log("First byte to draw is " + data.charCodeAt(j))
-            for (var j = 0, i=0; j < data.length; i++,j++) {
-                if ( j % 4 == 3 ){
-                    img.data[i] = 255-data.charCodeAt(j);
-                }else{
-                    img.data[i] = data.charCodeAt(j);
-                }
+            var imgdata = img.data;
+            var len  = data.length;
+            for (var i=0; i < len; i+=4) {
+                imgdata[i]   =  data.charCodeAt(i);
+                imgdata[i+1] =  data.charCodeAt(i+1);
+                imgdata[i+2] =  data.charCodeAt(i+2);
+                imgdata[i+3] =  255 - data.charCodeAt(i+3);
             }
 
             vnc.context.putImageData(img, x, y);
@@ -166,7 +154,6 @@ function VNC () {
         }
 
         vnc.startTimer();
-
         vnc.bind_mouse_events();
     };
 }
