@@ -43,7 +43,8 @@ class WSVncApp(object):
 
     def __call__(self, environ, start_response):
         ws = environ['wsgi.websocket']
-        vnctransport = gevent.socket.create_connection(("localhost",5900))
+        (host,port) = environ['PATH_INFO'][1:].split(':')
+        vnctransport = gevent.socket.create_connection((host,port))
         vnc = RFBClient(vnctransport)
         (name, width, height) = vnc.get_info()
         buff = json.dumps({"type":"s", "name":name, "width":width, "height":height})

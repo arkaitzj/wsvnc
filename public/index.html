@@ -6,7 +6,7 @@
         <script type="text/javascript" src="jquery.json.min.js"></script>
         <script type="text/javascript" src="vnc.js"></script>
         <script type="text/javascript">
-            $(document).ready(function() {
+            function openws(url) {
                 var updates = 0;
                 var fps_timer = setInterval(function(){ 
                     $('#fps').html(updates + ' fps');
@@ -16,7 +16,7 @@
                 if("MozWebSocket" in window){ 
                     WebSocket = MozWebSocket;    
                 }
-                var ws = new WebSocket("ws://localhost:9999");
+                var ws = new WebSocket('ws://localhost:9999/'+url);
 
                 var vnc = new VNC();
                 vnc.onsend = function(message) {
@@ -55,14 +55,27 @@
                     $('#disconnect').html('');
                     $('#container').html('Disconnected');
                 };
+            }
+
+            $(document).ready(function(){ 
+               $('#connectto').submit(function(){
+                   var url = $('input#wsurl').val();
+                   $('#container').html("Connecting...");
+                   openws(url);
+                   return false;
+                });
+            
             });
+
+
         </script>
     </head>
     <body>
+        <form id='connectto' action="."> <input type='text' id="wsurl"/> <input type="submit" value="connect"/></form>
         <div id='fps'>n/a</div>
         <div id="disconnect"></div>
         <div id="container">
-            Connecting...
+            Not connected
         </div>
     </body>
 </html>
