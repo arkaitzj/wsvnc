@@ -1,0 +1,4 @@
+gevent
+hg+https://bitbucket.org/arkaitzj/gevent-websocket#egg=gevent-websocket
+http://bitbucket.org/snaury/greenlet/get/tip.zip#egg=greenlet
+Paste
