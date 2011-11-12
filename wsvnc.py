@@ -43,13 +43,12 @@ class WSVncApp(object):
 
     def __call__(self, environ, start_response):
         ws = environ['wsgi.websocket']
-        transport = gevent.socket.create_connection(("localhost",5900))
-        vnc = RFBClient(transport)
+        vnctransport = gevent.socket.create_connection(("localhost",5900))
+        vnc = RFBClient(vnctransport)
         (name, width, height) = vnc.get_info()
         buff = json.dumps({"type":"s", "name":name, "width":width, "height":height})
         buff = chr(len(buff)) + buff
         ws.send(buff)
-        counter = 0
         while True:
             fds = select.select([ws,vnc],[],[])[0]
             if vnc in fds:
@@ -59,13 +58,17 @@ class WSVncApp(object):
                         buff = '{ "type":"fu","rectangle":{"x":'+str(rectangle["x"])+',"y":'+str(rectangle["y"])+',"width":'+str(rectangle["width"])+',"height":'+str(rectangle["height"])+',"encoding":"'+str(rectangle["encoding"])+'", "datalen":'+str(len(rectangle['data']))+'} }'
                         buff = chr(len(buff)) + buff + rectangle['data']
                         ws.send(buff)
-                        counter += 1
                 elif msg == 2:
                     buff = '{"type":"bell"}'
                     buff = chr(buff) + buff
                     ws.send(buff)
             if ws in fds:
                 raw = ws.receive()
+                if raw == None:
+                    print "WS closed"
+                    vnctransport.close()
+                    ws.close()
+                    break
                 msg = json.loads(raw)
                 msgtype = msg['type']
                 if   msgtype == 'fuq':
@@ -76,12 +79,11 @@ class WSVncApp(object):
                     else:
                         vnc.mouse(int(msg['x']),int(msg['y']))
                 elif msgtype == 'ke':
-                    print msg
-                    print chr(msg['key'])
                     key = self.KEYS[msg['key']] if msg['key'] in self.KEYS else msg['key']
                     vnc.key_event(key, msg['is_down'] )
                 else:
                     print msg['type']
+        print "WSVNC exiting"
 
 if __name__ == '__main__':
     main()
