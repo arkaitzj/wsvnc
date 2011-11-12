@@ -9,12 +9,7 @@ See vncviewer.py for an example.
 MIT License
 """
 
-import sys
 from struct import pack, unpack
-import crippled_des
-
-#~ from twisted.internet import reactor
-
 
 #encoding-type
 #for SetEncodings()
@@ -160,34 +155,22 @@ class RFBClient(object):
            unpack("!BBBBHHHBBBxxx", pixformat)
         self.bypp = self.bpp / 8        #calc bytes per pixel
 
-    def mouse(self,x,y,left=0,right=0):
-        buttonmask = 0
-        if left:
-            buttonmask |= 0x01
-        if right:
-            buttonmask |= 0x03
-        self.transport.send(pack("!BBhh", 5, buttonmask, x, y))
 
 
-    def _handleConnFailed(self):
-        (waitfor,) = unpack("!I", block)
-        self.expect(self._handleConnMessage, waitfor)
+#    def _handleVNCAuth(self, block):
+#        self._challenge = block
+#        self.vncRequestPassword()
+#        self.expect(self._handleVNCAuthResult, 4)
 
-
-    def _handleVNCAuth(self, block):
-        self._challenge = block
-        self.vncRequestPassword()
-        self.expect(self._handleVNCAuthResult, 4)
-
-    def sendPassword(self, password):
-        """send password"""
-        pw = (password + '\0' * 8)[:8]        #make sure its 8 chars long, zero padded
-        #~ des = Crypto.Cipher.DES.new(pw)
-        #~ response = des.encrypt(challenge)
-        des = crippled_des.DesCipher(pw)
-        response = des.encrypt(self._challenge[:8]) +\
-                   des.encrypt(self._challenge[8:])
-        self.transport.write(response)
+#    def sendPassword(self, password):
+#        """send password"""
+#        pw = (password + '\0' * 8)[:8]        #make sure its 8 chars long, zero padded
+#        #~ des = Crypto.Cipher.DES.new(pw)
+#        #~ response = des.encrypt(challenge)
+#        des = crippled_des.DesCipher(pw)
+#        response = des.encrypt(self._challenge[:8]) +\
+#                   des.encrypt(self._challenge[8:])
+#        self.transport.write(response)
 
     def receive(self):
         block = self.transport.recv(2)
@@ -247,288 +230,36 @@ class RFBClient(object):
 
 
     
-    def _handleVNCAuthResult(self, block):
-        (result,) = unpack("!I", block)
-        #~ print "auth:", auth
-        if result == 0:     #OK
-            self._doClientInitialization()
-            return
-        elif result == 1:   #failed
-            self.vncAuthFailed("autenthication failed")
-            self.transport.loseConnection()
-        elif result == 2:   #too many
-            slef.vncAuthFailed("too many tries to log in")
-            self.transport.loseConnection()
-        else:
-            log.msg("unknown auth response (%d)\n" % auth)
+#    def _handleVNCAuthResult(self, block):
+#        (result,) = unpack("!I", block)
+#        #~ print "auth:", auth
+#        if result == 0:     #OK
+#            self._doClientInitialization()
+#            return
+#        elif result == 1:   #failed
+#            self.vncAuthFailed("autenthication failed")
+#            self.transport.loseConnection()
+#        elif result == 2:   #too many
+#            slef.vncAuthFailed("too many tries to log in")
+#            self.transport.loseConnection()
+#        else:
+#            log.msg("unknown auth response (%d)\n" % auth)
+#        
         
-        
-    #------------------------------------------------------
-    # Server to client messages
-    #------------------------------------------------------
-    def _handleConnection(self, block):
-        (msgid,) = unpack("!B", block)
-        if msgid == 0:
-            self.expect(self._handleFramebufferUpdate, 3)
-        elif msgid == 2:
-            self.bell()
-            self.expect(self._handleConnection, 1)
-        elif msgid == 3:
-            self.expect(self._handleServerCutText, 7)
-        else:
-            log.msg("unknown message received (id %d)\n" % msgid)
-            self.expect(self._handleConnection, 1)
-        
-    def _handleFramebufferUpdate(self, block):
-        (self.rectangles,) = unpack("!xH", block)
-        self.rectanglePos = []
-        self.beginUpdate()
-        self._doConnection()
-    
-    def _doConnection(self):
-        if self.rectangles:
-            self.expect(self._handleRectangle, 12)
-        else:
-            self.commitUpdate(self.rectanglePos)
-            self.expect(self._handleConnection, 1)
-    
-    def _handleRectangle(self, block):
-        (x, y, width, height, encoding) = unpack("!HHHHI", block)
-        if self.rectangles:
-            self.rectangles -= 1
-            self.rectanglePos.append( (x, y, width, height) )
-            if encoding == COPY_RECTANGLE_ENCODING:
-                self.expect(self._handleDecodeCopyrect, 4, x, y, width, height)
-            elif encoding == RAW_ENCODING:
-                self.expect(self._handleDecodeRAW, width*height*self.bypp, x, y, width, height)
-            elif encoding == HEXTILE_ENCODING:
-                self._doNextHextileSubrect(None, None, x, y, width, height, None, None)
-            elif encoding == CORRE_ENCODING:
-                self.expect(self._handleDecodeCORRE, 4 + self.bypp, x, y, width, height)
-            elif encoding == RRE_ENCODING:
-                self.expect(self._handleDecodeRRE, 4 + self.bypp, x, y, width, height)
-            #~ elif encoding == ZRLE_ENCODING:
-                #~ self.expect(self._handleDecodeZRLE, )
-            else:
-                log.msg("unknown encoding received (encoding %d)\n" % encoding)
-                self._doConnection()
-        else:
-            self._doConnection()
-
-    # ---  RAW Encoding
-    
-    def _handleDecodeRAW(self, block, x, y, width, height):
-        #TODO convert pixel format?
-        self.updateRectangle(x, y, width, height, block)
-        self._doConnection()
-    
-    # ---  CopyRect Encoding
-    
-    def _handleDecodeCopyrect(self, block, x, y, width, height):
-        (srcx, srcy) = unpack("!HH", block)
-        self.copyRectangle(srcx, srcy, x, y, width, height)
-        self._doConnection()
-        
-    # ---  RRE Encoding
-    
-    def _handleDecodeRRE(self, block, x, y, width, height):
-        (subrects,) = unpack("!I", block[:4])
-        color = block[4:]
-        self.fillRectangle(x, y, width, height, color)
-        if subrects:
-            self.expect(self._handleRRESubRectangles, (8 + self.bypp) * subrects, x, y)
-        else:
-            self._doConnection()
-
-    def _handleRRESubRectangles(self, block, topx, topy):
-        #~ print "_handleRRESubRectangle"
-        pos = 0
-        end = len(block)
-        sz  = self.bypp + 8
-        format = "!%dsHHHH" % self.bypp
-        while pos < end:
-            (color, x, y, width, height) = unpack(format, block[pos:pos+sz])
-            self.fillRectangle(topx + x, topy + y, width, height, color)
-            pos += sz
-        self._doConnection()
-
-    # ---  CoRRE Encoding
-
-    def _handleDecodeCORRE(self, block, x, y, width, height):
-        (subrects,) = unpack("!I", block[:4])
-        color = block[4:]
-        self.fillRectangle(x, y, width, height, color)
-        if subrects:
-            self.expect(self._handleDecodeCORRERectangles, (4 + self.bypp)*subrects, x, y)
-        else:
-            self._doConnection()
-
-    def _handleDecodeCORRERectangles(self, block, topx, topy):
-        #~ print "_handleDecodeCORRERectangle"
-        pos = 0
-        end = len(block)
-        sz  = self.bypp + 4
-        format = "!%dsBBBB" % self.bypp
-        while pos < sz:
-            (color, x, y, width, height) = unpack(format, block[pos:pos+sz])
-            self.fillRectangle(topx + x, topy + y, width, height, color)
-            pos += sz
-        self._doConnection()
-
-    # ---  Hexile Encoding
-    
-    def _doNextHextileSubrect(self, bg, color, x, y, width, height, tx, ty):
-        #~ print "_doNextHextileSubrect %r" % ((color, x, y, width, height, tx, ty), )
-        #coords of next tile
-        #its line after line of tiles
-        #finished when the last line is completly received
-        
-        #dont inc the first time
-        if tx is not None:
-            #calc next subrect pos
-            tx += 16
-            if tx >= x + width:
-                tx = x
-                ty += 16
-        else:
-            tx = x
-            ty = y
-        #more tiles?
-        if ty >= y + height:
-            self._doConnection()
-        else:
-            self.expect(self._handleDecodeHextile, 1, bg, color, x, y, width, height, tx, ty)
-        
-    def _handleDecodeHextile(self, block, bg, color, x, y, width, height, tx, ty):
-        (subencoding,) = unpack("!B", block)
-        #calc tile size
-        tw = th = 16
-        if x + width - tx < 16:   tw = x + width - tx
-        if y + height - ty < 16:  th = y + height- ty
-        #decode tile
-        if subencoding & 1:     #RAW
-            self.expect(self._handleDecodeHextileRAW, tw*th*self.bypp, bg, color, x, y, width, height, tx, ty, tw, th)
-        else:
-            numbytes = 0
-            if subencoding & 2:     #BackgroundSpecified
-                numbytes += self.bypp
-            if subencoding & 4:     #ForegroundSpecified
-                numbytes += self.bypp
-            if subencoding & 8:     #AnySubrects
-                numbytes += 1
-            if numbytes:
-                self.expect(self._handleDecodeHextileSubrect, numbytes, subencoding, bg, color, x, y, width, height, tx, ty, tw, th)
-            else:
-                self.fillRectangle(tx, ty, tw, th, bg)
-                self._doNextHextileSubrect(bg, color, x, y, width, height, tx, ty)
-    
-    def _handleDecodeHextileSubrect(self, block, subencoding, bg, color, x, y, width, height, tx, ty, tw, th):
-        subrects = 0
-        pos = 0
-        if subencoding & 2:     #BackgroundSpecified
-            bg = block[:self.bypp]
-            pos += self.bypp
-        self.fillRectangle(tx, ty, tw, th, bg)
-        if subencoding & 4:     #ForegroundSpecified
-            color = block[pos:pos+self.bypp]
-            pos += self.bypp
-        if subencoding & 8:     #AnySubrects
-            #~ (subrects, ) = unpack("!B", block)
-            subrects = ord(block[pos])
-        #~ print subrects
-        if subrects:
-            if subencoding & 16:    #SubrectsColoured
-                self.expect(self._handleDecodeHextileSubrectsColoured, (self.bypp + 2)*subrects, bg, color, subrects, x, y, width, height, tx, ty, tw, th)
-            else:
-                self.expect(self._handleDecodeHextileSubrectsFG, 2*subrects, bg, color, subrects, x, y, width, height, tx, ty, tw, th)
-        else:
-            self._doNextHextileSubrect(bg, color, x, y, width, height, tx, ty)
-    
-    
-    def _handleDecodeHextileRAW(self, block, bg, color, x, y, width, height, tx, ty, tw, th):
-        """the tile is in raw encoding"""
-        self.updateRectangle(tx, ty, tw, th, block)
-        self._doNextHextileSubrect(bg, color, x, y, width, height, tx, ty)
-    
-    def _handleDecodeHextileSubrectsColoured(self, block, bg, color, subrects, x, y, width, height, tx, ty, tw, th):
-        """subrects with their own color"""
-        sz = self.bypp + 2
-        pos = 0
-        end = len(block)
-        while pos < end:
-            pos2 = pos + self.bypp
-            color = block[pos:pos2]
-            xy = ord(block[pos2])
-            wh = ord(block[pos2+1])
-            sx = xy >> 4
-            sy = xy & 0xf
-            sw = (wh >> 4) + 1
-            sh = (wh & 0xf) + 1
-            self.fillRectangle(tx + sx, ty + sy, sw, sh, color)
-            pos += sz
-        self._doNextHextileSubrect(bg, color, x, y, width, height, tx, ty)
-    
-    def _handleDecodeHextileSubrectsFG(self, block, bg, color, subrects, x, y, width, height, tx, ty, tw, th):
-        """all subrect with same color"""
-        pos = 0
-        end = len(block)
-        while pos < end:
-            xy = ord(block[pos])
-            wh = ord(block[pos+1])
-            sx = xy >> 4
-            sy = xy & 0xf
-            sw = (wh >> 4) + 1
-            sh = (wh & 0xf) + 1
-            self.fillRectangle(tx + sx, ty + sy, sw, sh, color)
-            pos += 2
-        self._doNextHextileSubrect(bg, color, x, y, width, height, tx, ty)
-
-
-    # ---  ZRLE Encoding
-    
-    def _handleDecodeZRLE(self, block):
-        raise NotImplementedError
-
+#    def _handleDecodeCopyrect(self, block, x, y, width, height):
+#        (srcx, srcy) = unpack("!HH", block)
+#        self.copyRectangle(srcx, srcy, x, y, width, height)
+#        self._doConnection()
+#        
     # ---  other server messages
     
-    def _handleServerCutText(self, block):
-        (length, ) = unpack("!xxxI", block)
-        self.expect(self._handleServerCutTextValue, length)
-    
-    def _handleServerCutTextValue(self, block):
-        self.copy_text(block)
-        self.expect(self._handleConnection, 1)
-    
-    #------------------------------------------------------
-    # incomming data redirector
-    #------------------------------------------------------
-    def dataReceived(self, data):
-        #~ sys.stdout.write(repr(data) + '\n')
-        #~ print len(data), ", ", len(self._packet)
-        self._packet.append(data)
-        self._packet_len += len(data)
-        self._handler()
-
-    def _handleExpected(self):
-        if self._packet_len >= self._expected_len:
-            buffer = ''.join(self._packet)
-            while len(buffer) >= self._expected_len:
-                self._already_expecting = 1
-                block, buffer = buffer[:self._expected_len], buffer[self._expected_len:]
-                #~ log.msg("handle %r with %r\n" % (block, self._expected_handler.__name__))
-                self._expected_handler(block, *self._expected_args, **self._expected_kwargs)
-            self._packet[:] = [buffer]
-            self._packet_len = len(buffer)
-            self._already_expecting = 0
-    
-    def expect(self, handler, size, *args, **kwargs):
-        #~ log.msg("expect(%r, %r, %r, %r)\n" % (handler.__name__, size, args, kwargs))
-        self._expected_handler = handler
-        self._expected_len = size
-        self._expected_args = args
-        self._expected_kwargs = kwargs
-        if not self._already_expecting:
-            self._handleExpected()   #just in case that there is already enough data
+#    def _handleServerCutText(self, block):
+#        (length, ) = unpack("!xxxI", block)
+#        self.expect(self._handleServerCutTextValue, length)
+#    
+#    def _handleServerCutTextValue(self, block):
+#        self.copy_text(block)
+#        self.expect(self._handleConnection, 1)
     
     #------------------------------------------------------
     # client -> server messages
@@ -554,146 +285,16 @@ class RFBClient(object):
         Other common keys are shown in the KEY_ constants."""
         self.transport.send(pack("!BBxxI", 4, down, key))
 
-    def pointerEvent(self, x, y, buttonmask=0):
-        """Indicates either pointer movement or a pointer button press or release. The pointer is
-           now at (x-position, y-position), and the current state of buttons 1 to 8 are represented
-           by bits 0 to 7 of button-mask respectively, 0 meaning up, 1 meaning down (pressed).
-        """
-        self.transport.write(pack("!BBHH", 5, buttonmask, x, y))
+    def mouse(self,x,y,left=0,right=0):
+        buttonmask = 0
+        if left:
+            buttonmask |= 0x01
+        if right:
+            buttonmask |= 0x03
+        self.transport.send(pack("!BBhh", 5, buttonmask, x, y))
 
-    def clientCutText(self, message):
-        """The client has new ASCII text in its cut buffer.
-           (aka clipboard)
-        """
-        self.transport.write(pack("!BxxxI", 6, len(message)) + message)
-    
-    #------------------------------------------------------
-    # callbacks
-    # override these in your application
-    #------------------------------------------------------
-    def vncConnectionMade(self):
-        """connection is initialized and ready.
-           typicaly, the pixel format is set here."""
-
-    def vncRequestPassword(self):
-        """a password is needed to log on, use sendPassword() to
-           send one."""
-        if self.factory.password is None:
-            log.msg("need a password\n")
-            self.transport.loseConnection()
-            return
-        self.sendPassword(self.factory.password)
-
-    def vncAuthFailed(self, reason):
-        """called when the authentication failed.
-           the connection is closed."""
-        log.msg("Cannot connect: %s\n" % reason)
-
-    def beginUpdate(self):
-        """called before a series of updateRectangle(),
-           copyRectangle() or fillRectangle()."""
-    
-    def commitUpdate(self, rectangles=None):
-        """called after a series of updateRectangle(), copyRectangle()
-           or fillRectangle() are finished.
-           typicaly, here is the place to request the next screen 
-           update with FramebufferUpdateRequest(incremental=1).
-           argument is a list of tuples (x,y,w,h) with the updated
-           rectangles."""
-        
-    def updateRectangle(self, x, y, width, height, data):
-        """new bitmap data. data is a string in the pixel format set
-           up earlier."""
-    
-    def copyRectangle(self, srcx, srcy, x, y, width, height):
-        """used for copyrect encoding. copy the given rectangle
-           (src, srxy, width, height) to the target coords (x,y)"""
-    
-    def fillRectangle(self, x, y, width, height, color):
-        """fill the area with the color. the color is a string in
-           the pixel format set up earlier"""
-        #fallback variant, use update recatngle
-        #override with specialized function for better performance
-        self.updateRectangle(x, y, width, height, color*width*height)
-
-    def bell(self):
-        """bell"""
-    
-    def copy_text(self, text):
-        """The server has new ASCII text in its cut buffer.
-           (aka clipboard)"""
-
-class RFBFactory(object):
-    """A factory for remote frame buffer connections."""
-
-    # the class of the protocol to build
-    # should be overriden by application to use a derrived class
-    protocol = RFBClient
-    
-    def __init__(self, password = None, shared = 0):
-        self.password = password
-        self.shared = shared
-
-# --- test code only, see vncviewer.py
-#
-#if __name__ == '__main__':
-#    class RFBTest(RFBClient):
-#        """dummy client"""
-#        def vncConnectionMade(self):
-#            print "Screen format: depth=%d bytes_per_pixel=%r" % (self.depth, self.bpp)
-#            print "Desktop name: %r" % self.name
-#            self.SetEncodings([RAW_ENCODING])
-#            self.FramebufferUpdateRequest()
-#        
-#        def updateRectangle(self, x, y, width, height, data):
-#            print "%s " * 5 % (x, y, width, height, repr(data[:20]))
-#    
-#    class RFBTestFactory(protocol.ClientFactory):
-#        """test factory"""
-#        protocol = RFBTest
-#        def clientConnectionLost(self, connector, reason):
-#            print reason
-#            from twisted.internet import reactor
-#            reactor.stop()
-#            #~ connector.connect()
-#    
-#        def clientConnectionFailed(self, connector, reason):
-#            print "connection failed:", reason
-#            from twisted.internet import reactor
-#            reactor.stop()
-#
-#    class Options(usage.Options):
-#        """command line options"""
-#        optParameters = [
-#            ['display',     'd', '0',               'VNC display'],
-#            ['host',        'h', 'localhost',       'remote hostname'],
-#            ['outfile',     'o', None,              'Logfile [default: sys.stdout]'],
-#        ]
-#        
-#    o = Options()
-#    try:
-#        o.parseOptions()
-#    except usage.UsageError, errortext:
-#        print "%s: %s" % (sys.argv[0], errortext)
-#        print "%s: Try --help for usage details." % (sys.argv[0])
-#        raise SystemExit, 1
-#
-#    logFile = sys.stdout
-#    if o.opts['outfile']:
-#        logFile = o.opts['outfile']
-#    log.startLogging(logFile)
-#    
-#    host = o.opts['host']
-#    port = int(o.opts['display']) + 5900
-#
-#    application = service.Application("rfb test") # create Application
-#
-#    # connect to this host and port, and reconnect if we get disconnected
-#    vncClient = internet.TCPClient(host, port, RFBFactory()) # create the service
-#    vncClient.setServiceParent(application)
-#
-#    # this file should be run as 'twistd -y rfb.py' but it didn't work -
-#    # could't import crippled_des.py, so using this hack
-#    from twisted.internet import reactor
-#    vncClient.startService()
-#    reactor.run()
+#    def clientCutText(self, message):
+#        """The client has new ASCII text in its cut buffer.
+#           (aka clipboard)
+#        """
+#        self.transport.write(pack("!BxxxI", 6, len(message)) + message)
